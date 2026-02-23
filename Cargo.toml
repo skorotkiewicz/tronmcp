@@ -18,3 +18,16 @@ rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = "s"
+debug = false
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+incremental = false
+strip = true
+
+# opt-level = 3   # Maximum performance. I don’t care how big it gets. Make it fast.
+# opt-level = "z" # Minimum size. I care about binary size more than raw speed.
+# opt-level = "s" # Optimize for size, but not as aggressively as "z".
