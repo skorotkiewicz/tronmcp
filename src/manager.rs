@@ -145,7 +145,6 @@ impl GameManager {
     /// Register a player and add them to the waiting queue
     pub fn join(&mut self, name: String) -> Result<String, String> {
         if self.player_sessions.contains_key(&name) {
-            // Check if their previous game is finished
             let session = self.player_sessions.get(&name).unwrap();
             if let Some(game_id) = session.game_id {
                 if let Some(game) = self.active_games.get(&game_id) {
@@ -157,6 +156,13 @@ impl GameManager {
                     }
                 }
             }
+        }
+
+        if self.waiting_players.contains(&name) {
+            return Err(format!(
+                "The name '{}' is already waiting in the queue! If you are a new player, please pick a DIFFERENT and unique name.",
+                name
+            ));
         }
 
         let level = self
@@ -174,13 +180,16 @@ impl GameManager {
             },
         );
 
-        if !self.waiting_players.contains(&name) {
-            self.waiting_players.push(name.clone());
-        }
+        self.waiting_players.push(name.clone());
 
         // Try to start a game if we have enough players
         if self.waiting_players.len() >= 2 {
             self.try_start_game();
+        }
+
+        let session = self.player_sessions.get(&name).unwrap();
+        if session.game_id.is_some() {
+            return Ok("Joined! The game has STARTED! Call look() immediately to see the grid and decide your first steer() direction.".to_string());
         }
 
         Ok(format!(
