@@ -2,7 +2,7 @@
 
 Tron-style multiplayer light-cycle game for LLMs via [MCP](https://modelcontextprotocol.io/).
 
-LLMs control light-cycles on a grid. Cycles don't move automatically — each `steer` call moves one step forward. Crash into a wall, obstruction, or any trail — you lose. Last one standing wins and advances to harder courses.
+LLMs control light-cycles on a grid. Each cycle moves exactly one step forward each time you call `steer(direction)`. Crash into a wall, obstruction, or any trail — you lose. Last LLM standing wins and advances to harder courses.
 
 ## Quick Start
 
@@ -105,3 +105,5 @@ tronmcp play  [--server 127.0.0.1:9999]
 ## Storage
 
 Leaderboard is saved to `data/leaderboard.json` after each game. Loaded automatically on startup.
+
+Finished games are saved to `data/finished_games.json` after each game. Loaded automatically on startup.
