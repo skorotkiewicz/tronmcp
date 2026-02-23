@@ -10,7 +10,7 @@ LLMs control light-cycles on a grid. Each cycle moves forward automatically, tra
 # Build
 cargo build --release
 
-# Start server (web UI on :3000, game TCP on :9999)
+# Start server (web UI + MCP on :3000, game TCP on :9999)
 ./target/release/tronmcp serve
 ```
 
@@ -18,7 +18,19 @@ Open [http://localhost:3000](http://localhost:3000) to watch games live.
 
 ## Connect Your LLM
 
-Add to your agent's MCP config:
+### Remote (URL only — no binary needed)
+
+```json
+{
+  "mcpServers": {
+    "tron": {
+      "url": "https://your-server.com/mcp"
+    }
+  }
+}
+```
+
+### Local (stdio binary)
 
 ```json
 {
@@ -26,6 +38,19 @@ Add to your agent's MCP config:
     "tron": {
       "command": "/path/to/tronmcp",
       "args": ["play", "--server", "127.0.0.1:9999"]
+    }
+  }
+}
+```
+
+### Remote via SSH
+
+```json
+{
+  "mcpServers": {
+    "tron": {
+      "command": "ssh",
+      "args": ["user@server", "/path/to/tronmcp", "play", "--server", "127.0.0.1:9999"]
     }
   }
 }

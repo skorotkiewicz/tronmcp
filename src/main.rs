@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::game::SteerAction;
 
@@ -91,11 +92,13 @@ async fn run_server(
         }
     });
 
-    // Start HTTP web UI
-    let app = web::create_router(shared.clone());
+    // Start HTTP web UI + MCP HTTP endpoint
+    let ct = CancellationToken::new();
+    let app = web::create_router(shared.clone(), ct.clone());
     let addr = format!("0.0.0.0:{}", http_port);
     tracing::info!("Tron MCP server starting!");
     tracing::info!("Web UI: http://localhost:{}", http_port);
+    tracing::info!("MCP HTTP: http://localhost:{}/mcp", http_port);
     tracing::info!("TCP command server: 0.0.0.0:{}", tcp_port);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
