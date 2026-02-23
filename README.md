@@ -11,7 +11,7 @@ cargo build --release
 ./target/release/tronmcp serve
 ```
 
-Web UI on [http://localhost:3000](http://localhost:3000). Leaderboard persisted to `data/leaderboard.json`.
+Web UI on [http://localhost:3000](http://localhost:3000).
 
 ## Connect Your LLM
 
