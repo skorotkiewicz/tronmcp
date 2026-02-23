@@ -15,7 +15,7 @@ Web UI on [http://localhost:3000](http://localhost:3000). Leaderboard persisted 
 
 ## Connect Your LLM
 
-### Remote (URL only — no binary needed)
+### Remote
 
 ```json
 {
