@@ -1,0 +1,58 @@
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a12;--surface:#12121f;--border:#1a1a2e;
+  --cyan:#00f0ff;--magenta:#ff00e5;--green:#00ff88;--orange:#ff8800;--red:#ff2255;
+  --text:#c8c8e0;--text-dim:#6a6a8e;
+  --glow-cyan:0 0 10px #00f0ff44,0 0 30px #00f0ff22;
+  --glow-magenta:0 0 10px #ff00e544,0 0 30px #ff00e522;
+}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;min-height:100vh;overflow-x:hidden}
+h1,h2,h3{font-family:'Orbitron',sans-serif;letter-spacing:2px}
+.header{text-align:center;padding:2rem 1rem;border-bottom:1px solid var(--border);position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanline 3s ease-in-out infinite}
+@keyframes scanline{0%,100%{width:200px;opacity:.5}50%{width:600px;opacity:1}}
+.header h1{font-size:2.5rem;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:none;margin-bottom:.5rem}
+.header p{color:var(--text-dim);font-size:.9rem}
+.container{max-width:1400px;margin:0 auto;padding:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:900px){.container{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem;position:relative;overflow:hidden;transition:border-color .3s}
+.card:hover{border-color:#2a2a4e}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.3}
+.card h2{font-size:1rem;color:var(--cyan);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.card h2 .dot{width:8px;height:8px;border-radius:50%;animation:pulse 2s infinite}
+.dot.live{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--text-dim)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.full-width{grid-column:1/-1}
+/* Game canvas area */
+.game-view{display:flex;flex-direction:column;align-items:center;gap:1rem}
+.game-canvas-wrap{position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#08080f}
+canvas{display:block}
+.game-info{display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.8rem;color:var(--text-dim)}
+.game-info span{display:flex;align-items:center;gap:.3rem}
+/* Player colors */
+.p0{color:var(--cyan)}.p1{color:var(--magenta)}.p2{color:var(--green)}.p3{color:var(--orange)}
+.p4{color:#aa66ff}.p5{color:#ffdd00}.p6{color:#ff6688}.p7{color:#66ddff}
+/* Games list */
+.games-list{display:flex;flex-direction:column;gap:.75rem;max-height:400px;overflow-y:auto}
+.game-item{background:#0e0e1a;border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;cursor:pointer;transition:all .2s;display:flex;justify-content:space-between;align-items:center}
+.game-item:hover{border-color:var(--cyan);box-shadow:var(--glow-cyan)}
+.game-item .status{font-size:.7rem;padding:2px 8px;border-radius:4px;font-family:'Orbitron',sans-serif;letter-spacing:1px}
+.status.running{background:#00ff8822;color:var(--green);border:1px solid #00ff8844}
+.status.waiting{background:#ff880022;color:var(--orange);border:1px solid #ff880044}
+.status.finished{background:#6a6a8e22;color:var(--text-dim);border:1px solid #6a6a8e44}
+/* Leaderboard */
+.lb-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.lb-table th{text-align:left;padding:.5rem;color:var(--cyan);border-bottom:1px solid var(--border);font-family:'Orbitron',sans-serif;font-size:.7rem;letter-spacing:1px}
+.lb-table td{padding:.5rem;border-bottom:1px solid #1a1a2e44}
+.lb-table tr:hover td{background:#ffffff06}
+.rank{color:var(--magenta);font-weight:700;font-family:'Orbitron',sans-serif}
+/* How to play */
+.howto{font-size:.85rem;line-height:1.7;color:var(--text-dim)}
+.howto h3{color:var(--magenta);margin:1rem 0 .5rem;font-size:.85rem}
+.howto ol{padding-left:1.5rem}
+.howto li{margin-bottom:.5rem}
+pre.config{background:#08080f;border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;font-size:.8rem;color:var(--green);margin:.75rem 0}
+.no-data{color:var(--text-dim);font-size:.85rem;text-align:center;padding:2rem}
+.player-list{display:flex;gap:.5rem;flex-wrap:wrap}
+.player-tag{font-size:.75rem;padding:2px 8px;border-radius:4px;border:1px solid}

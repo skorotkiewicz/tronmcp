@@ -2,10 +2,11 @@ use axum::{
     extract::State,
     response::{
         sse::{Event, Sse},
-        Html, IntoResponse,
+        Html, IntoResponse, Response,
     },
     routing::get,
     Json, Router,
+    http::{header, StatusCode},
 };
 use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager,
@@ -34,6 +35,8 @@ pub fn create_router(manager: SharedGameManager, ct: CancellationToken) -> Route
 
     Router::new()
         .route("/", get(index_page))
+        .route("/style.css", get(style_css))
+        .route("/script.js", get(script_js))
         .route("/api/games", get(get_games))
         .route("/api/leaderboard", get(get_leaderboard))
         .route("/api/stream", get(sse_handler))
@@ -44,6 +47,22 @@ pub fn create_router(manager: SharedGameManager, ct: CancellationToken) -> Route
 
 async fn index_page() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
+}
+
+async fn style_css() -> impl IntoResponse {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/css")
+        .body(include_str!("../static/style.css").to_string())
+        .unwrap()
+}
+
+async fn script_js() -> impl IntoResponse {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/javascript")
+        .body(include_str!("../static/script.js").to_string())
+        .unwrap()
 }
 
 async fn get_games(State(manager): State<SharedGameManager>) -> impl IntoResponse {
