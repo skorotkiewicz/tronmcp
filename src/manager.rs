@@ -21,7 +21,6 @@ pub struct LeaderboardEntry {
 /// Player session — tracks which game a connected player is in
 #[derive(Debug, Clone)]
 pub struct PlayerSession {
-    pub player_name: String,
     pub game_id: Option<Uuid>,
     pub player_index: Option<usize>,
     pub current_level: u32,
@@ -36,6 +35,7 @@ pub struct GameManager {
     pub waiting_players: Vec<String>,
     pub broadcast_tx: broadcast::Sender<String>,
     pub max_finished_games: usize,
+    pub max_leaderboard_size: usize,
     pub data_dir: PathBuf,
 }
 
@@ -49,18 +49,58 @@ impl GameManager {
 
         // Load persisted leaderboard
         let leaderboard = Self::load_leaderboard(&data_dir);
+        let finished_games = Self::load_finished_games(&data_dir);
 
         let manager = GameManager {
             active_games: HashMap::new(),
-            finished_games: Vec::new(),
+            finished_games,
             leaderboard,
             player_sessions: HashMap::new(),
             waiting_players: Vec::new(),
             broadcast_tx: tx,
-            max_finished_games: 100,
+            max_finished_games: 30,
+            max_leaderboard_size: 10,
             data_dir,
         };
         (manager, rx)
+    }
+
+    fn finished_games_path(data_dir: &Path) -> PathBuf {
+        data_dir.join("finished_games.json")
+    }
+
+    fn save_finished_games(&self) {
+        let path = Self::finished_games_path(&self.data_dir);
+        match serde_json::to_string_pretty(&self.finished_games) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&path, json) {
+                    tracing::error!("Failed to save finished games: {}", e);
+                }
+            }
+            Err(e) => tracing::error!("Failed to serialize finished games: {}", e),
+        }
+    }
+
+    fn load_finished_games(data_dir: &Path) -> Vec<WebGameState> {
+        let path = Self::finished_games_path(data_dir);
+        match std::fs::read_to_string(&path) {
+            Ok(json) => {
+                match serde_json::from_str::<Vec<WebGameState>>(&json) {
+                    Ok(entries) => {
+                        tracing::info!("Loaded {} finished games from {}", entries.len(), path.display());
+                        entries
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse finished games: {}", e);
+                        Vec::new()
+                    }
+                }
+            }
+            Err(_) => {
+                tracing::info!("No existing finished games at {}, starting fresh", path.display());
+                Vec::new()
+            }
+        }
     }
 
     fn leaderboard_path(data_dir: &Path) -> PathBuf {
@@ -128,7 +168,6 @@ impl GameManager {
         self.player_sessions.insert(
             name.clone(),
             PlayerSession {
-                player_name: name.clone(),
                 game_id: None,
                 player_index: None,
                 current_level: level,
@@ -378,6 +417,7 @@ impl GameManager {
             }
 
             self.save_leaderboard();
+            self.save_finished_games();
         }
     }
 
@@ -385,6 +425,7 @@ impl GameManager {
     pub fn get_leaderboard(&self) -> Vec<LeaderboardEntry> {
         let mut entries: Vec<LeaderboardEntry> = self.leaderboard.values().cloned().collect();
         entries.sort_by(|a, b| b.total_points.cmp(&a.total_points));
+        entries.truncate(self.max_leaderboard_size);
         entries
     }
 

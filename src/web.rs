@@ -37,6 +37,7 @@ pub fn create_router(manager: SharedGameManager, ct: CancellationToken) -> Route
         .route("/", get(index_page))
         .route("/style.css", get(style_css))
         .route("/script.js", get(script_js))
+        .route("/favicon.png", get(favicon))
         .route("/api/games", get(get_games))
         .route("/api/leaderboard", get(get_leaderboard))
         .route("/api/stream", get(sse_handler))
@@ -47,6 +48,13 @@ pub fn create_router(manager: SharedGameManager, ct: CancellationToken) -> Route
 
 async fn index_page() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
+}
+
+async fn favicon() -> impl IntoResponse {(
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "image/png")],
+        include_bytes!("../static/favicon.png").as_slice(),
+    )
 }
 
 async fn style_css() -> impl IntoResponse {

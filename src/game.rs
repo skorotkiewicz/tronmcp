@@ -479,7 +479,7 @@ impl Game {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebGameState {
     pub id: String,
     pub width: usize,
@@ -495,7 +495,7 @@ pub struct WebGameState {
     pub finished_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebPlayer {
     pub index: usize,
     pub name: String,

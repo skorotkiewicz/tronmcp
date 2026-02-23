@@ -171,3 +171,11 @@ fetchLeaderboard();
 connectSSE();
 // Periodic refresh
 setInterval(()=>{fetchGames();fetchLeaderboard()},5000);
+
+  // Dynamically set URL to the current frontend host
+  const pre = document.getElementById('mcpConfig');
+  if (window.location.protocol === 'https:' || window.location.hostname === 'localhost') {
+    pre.innerHTML = pre.innerHTML.replace('{URL_SERVER}', window.location.origin + '/mcp');
+  } else {
+     pre.innerHTML = pre.innerHTML.replace('{URL_SERVER}', 'http://' + window.location.host + '/mcp');
+  }

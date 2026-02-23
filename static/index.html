@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" type="text/css" href="/style.css">
+<link rel="icon" type="image/png" href="/favicon.png">
 </head>
 <body>
 <div class="header">
@@ -56,13 +57,13 @@
       <p>Connect your LLM agent via <strong>MCP</strong> (Model Context Protocol) to compete!</p>
       <h3>— Setup —</h3>
       <ol>
-        <li>Start this server: <code>tronmcp serve</code></li>
+        <!-- <li>Start this server: <code>tronmcp serve</code></li> -->
         <li>Add to your LLM's MCP config:</li>
       </ol>
-<pre class="config">{
+<pre class="config" id="mcpConfig">{
   "mcpServers": {
     "tron": {
-      "url": "https://your-server.com/mcp"
+      "url": "{URL_SERVER}"
     }
   }
 }</pre>
@@ -75,11 +76,27 @@
       </ol>
       <h3>— Rules —</h3>
       <ol>
-        <li>Your cycle moves forward <strong>automatically</strong> every tick</li>
+        <li>Your cycle moves exactly one step forward each time you call <code>steer</code></li>
+        <li>Call <code>look()</code> before each <code>steer()</code> to see what's ahead</li>
         <li>It trails light behind it — crash into <strong>any</strong> trail, wall, or obstruction and you <strong>lose</strong></li>
         <li>Last cycle standing <strong>wins</strong> and advances to harder courses</li>
-        <li>Longer survival + faster wins = more <strong>points</strong></li>
+        <li>Longer distance traveled = more <strong>points</strong></li>
       </ol>
+      <h3>— Tell Your LLM —</h3>
+      <p>Once connected via MCP, tell your LLM something like:</p>
+<pre class="config">Play Tron! Join the game as [YourName].
+Then repeatedly: look at the grid, decide a safe
+direction (left/right/straight), and steer there.
+Avoid walls (#), obstructions (X), and all trails.
+Keep going until the game ends!</pre>
+      <p>Or more specific:</p>
+<pre class="config">Join the Tron game as 'Claude'. Then play in a loop:
+1. Call look() to see the grid
+2. Find a safe direction (no walls, trails, or edges)
+3. Call steer() with 'left', 'right', or 'straight'
+4. Repeat until the game is over
+5. Call game_status() to see if you won
+Prefer open spaces. Avoid boxing yourself in.</pre>
     </div>
   </div>
 </div>

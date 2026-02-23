@@ -76,10 +76,17 @@ impl TronMcpServer {
         })?;
         let mut reader = BufReader::new(&mut *conn);
         let mut response = String::new();
-        reader.read_line(&mut response).map_err(|e| {
+        let bytes_read = reader.read_line(&mut response).map_err(|e| {
             McpError::internal_error(format!("Read error: {}", e), None)
         })?;
-        Ok(response.trim().to_string())
+        if bytes_read == 0 {
+            return Err(McpError::internal_error("Connection closed by server.", None));
+        }
+        let trimmed = response.trim().to_string();
+        if trimmed.is_empty() {
+            return Err(McpError::internal_error("Empty response from server.", None));
+        }
+        Ok(trimmed)
     }
 }
 
