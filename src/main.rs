@@ -31,9 +31,9 @@ enum Commands {
         /// TCP port for MCP player connections
         #[arg(long, default_value = "9999")]
         tcp_port: u16,
-        /// Game tick interval in milliseconds
-        #[arg(long, default_value = "500")]
-        tick_ms: u64,
+        /// Data directory for persistent storage
+        #[arg(long, default_value = "data")]
+        data_dir: String,
     },
     /// Connect as an MCP player (stdio mode for LLM agents)
     Play {
@@ -53,9 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Serve {
             port,
             tcp_port,
-            tick_ms,
+            data_dir,
         } => {
-            run_server(port, tcp_port, tick_ms).await?;
+            run_server(port, tcp_port, data_dir).await?;
         }
         Commands::Play { server } => {
             mcp::run_mcp_server(server).await?;
@@ -68,21 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_server(
     http_port: u16,
     tcp_port: u16,
-    tick_ms: u64,
+    data_dir: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (manager, _rx) = GameManager::new();
+    let (manager, _rx) = GameManager::new(&data_dir);
     let shared: SharedGameManager = Arc::new(Mutex::new(manager));
-
-    // Spawn game tick loop
-    let tick_manager = shared.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(tick_ms));
-        loop {
-            interval.tick().await;
-            let mut mgr = tick_manager.lock().await;
-            mgr.tick_all();
-        }
-    });
 
     // Spawn TCP command server for MCP players
     let tcp_manager = shared.clone();
@@ -193,7 +182,7 @@ async fn handle_command(cmd: &str, manager: &SharedGameManager) -> String {
                 _ => return "ERROR: Direction must be left, right, or straight".to_string(),
             };
             let mut mgr = manager.lock().await;
-            match mgr.steer(parts[1], action) {
+            match mgr.move_player(parts[1], action) {
                 Ok(msg) => msg,
                 Err(e) => format!("ERROR: {}", e),
             }

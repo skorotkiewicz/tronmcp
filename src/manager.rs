@@ -1,5 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
@@ -8,7 +9,7 @@ use crate::course::{all_courses, get_course};
 use crate::game::{Game, GameStatus, SteerAction, WebGameState};
 
 /// Leaderboard entry
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LeaderboardEntry {
     pub name: String,
     pub wins: u32,
@@ -35,21 +36,70 @@ pub struct GameManager {
     pub waiting_players: Vec<String>,
     pub broadcast_tx: broadcast::Sender<String>,
     pub max_finished_games: usize,
+    pub data_dir: PathBuf,
 }
 
 impl GameManager {
-    pub fn new() -> (Self, broadcast::Receiver<String>) {
+    pub fn new(data_dir: impl Into<PathBuf>) -> (Self, broadcast::Receiver<String>) {
         let (tx, rx) = broadcast::channel(256);
+        let data_dir = data_dir.into();
+
+        // Create data dir if it doesn't exist
+        let _ = std::fs::create_dir_all(&data_dir);
+
+        // Load persisted leaderboard
+        let leaderboard = Self::load_leaderboard(&data_dir);
+
         let manager = GameManager {
             active_games: HashMap::new(),
             finished_games: Vec::new(),
-            leaderboard: HashMap::new(),
+            leaderboard,
             player_sessions: HashMap::new(),
             waiting_players: Vec::new(),
             broadcast_tx: tx,
             max_finished_games: 100,
+            data_dir,
         };
         (manager, rx)
+    }
+
+    fn leaderboard_path(data_dir: &Path) -> PathBuf {
+        data_dir.join("leaderboard.json")
+    }
+
+    fn load_leaderboard(data_dir: &Path) -> HashMap<String, LeaderboardEntry> {
+        let path = Self::leaderboard_path(data_dir);
+        match std::fs::read_to_string(&path) {
+            Ok(json) => {
+                match serde_json::from_str::<Vec<LeaderboardEntry>>(&json) {
+                    Ok(entries) => {
+                        tracing::info!("Loaded {} leaderboard entries from {}", entries.len(), path.display());
+                        entries.into_iter().map(|e| (e.name.clone(), e)).collect()
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse leaderboard: {}", e);
+                        HashMap::new()
+                    }
+                }
+            }
+            Err(_) => {
+                tracing::info!("No existing leaderboard at {}, starting fresh", path.display());
+                HashMap::new()
+            }
+        }
+    }
+
+    fn save_leaderboard(&self) {
+        let entries = self.get_leaderboard();
+        let path = Self::leaderboard_path(&self.data_dir);
+        match serde_json::to_string_pretty(&entries) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&path, json) {
+                    tracing::error!("Failed to save leaderboard: {}", e);
+                }
+            }
+            Err(e) => tracing::error!("Failed to serialize leaderboard: {}", e),
+        }
     }
 
     /// Register a player and add them to the waiting queue
@@ -142,8 +192,8 @@ impl GameManager {
         }).to_string());
     }
 
-    /// Apply a steer action for a player
-    pub fn steer(&mut self, player_name: &str, action: SteerAction) -> Result<String, String> {
+    /// Move a player: steer + advance one step. Returns result message.
+    pub fn move_player(&mut self, player_name: &str, action: SteerAction) -> Result<String, String> {
         let session = self
             .player_sessions
             .get(player_name)
@@ -162,13 +212,20 @@ impl GameManager {
             .get_mut(&game_id)
             .ok_or_else(|| "Game not found.".to_string())?;
 
-        if game.status != GameStatus::Running {
-            return Err("Game is not running.".to_string());
+        let result = game.move_player(player_idx, action);
+
+        // Broadcast update
+        let _ = self.broadcast_tx.send(serde_json::json!({
+            "type": "game_update",
+            "game": game.to_web_state(),
+        }).to_string());
+
+        // Check if game just finished
+        if game.status == GameStatus::Finished {
+            self.finish_game(game_id);
         }
 
-        game.apply_action(player_idx, action);
-
-        Ok(format!("Steering {:?} applied.", action))
+        Ok(result)
     }
 
     /// Get the look view for a player
@@ -278,70 +335,49 @@ impl GameManager {
         lines.join("\n")
     }
 
-    /// Tick all active games, handle finished games
-    pub fn tick_all(&mut self) {
-        let mut finished_ids = Vec::new();
+    /// Handle a game that just finished — update leaderboard, broadcast, archive
+    fn finish_game(&mut self, game_id: Uuid) {
+        if let Some(game) = self.active_games.remove(&game_id) {
+            // Update leaderboard
+            for (i, player) in game.players.iter().enumerate() {
+                let entry = self
+                    .leaderboard
+                    .entry(player.name.clone())
+                    .or_insert_with(|| LeaderboardEntry {
+                        name: player.name.clone(),
+                        ..Default::default()
+                    });
+                entry.games_played += 1;
 
-        for (id, game) in &mut self.active_games {
-            if game.status == GameStatus::Running {
-                game.tick();
-                if game.status == GameStatus::Finished {
-                    finished_ids.push(*id);
-                }
-            }
-        }
+                if game.winner == Some(i) {
+                    entry.wins += 1;
+                    entry.total_points += player.score;
+                    if game.course_level >= entry.highest_level {
+                        entry.highest_level = game.course_level + 1;
+                    }
 
-        for id in finished_ids {
-            if let Some(game) = self.active_games.remove(&id) {
-                // Update leaderboard
-                for (i, player) in game.players.iter().enumerate() {
-                    let entry = self
-                        .leaderboard
-                        .entry(player.name.clone())
-                        .or_insert_with(|| LeaderboardEntry {
-                            name: player.name.clone(),
-                            ..Default::default()
-                        });
-                    entry.games_played += 1;
-
-                    if game.winner == Some(i) {
-                        entry.wins += 1;
-                        entry.total_points += player.score;
-                        if game.course_level >= entry.highest_level {
-                            entry.highest_level = game.course_level + 1;
-                        }
-
-                        // Advance winner's level
-                        if let Some(session) = self.player_sessions.get_mut(&player.name) {
-                            let max_level = all_courses().len() as u32;
-                            if session.current_level < max_level {
-                                session.current_level += 1;
-                            }
+                    // Advance winner's level
+                    if let Some(session) = self.player_sessions.get_mut(&player.name) {
+                        let max_level = all_courses().len() as u32;
+                        if session.current_level < max_level {
+                            session.current_level += 1;
                         }
                     }
                 }
-
-                let web_state = game.to_web_state();
-                let _ = self.broadcast_tx.send(serde_json::json!({
-                    "type": "game_finished",
-                    "game": &web_state,
-                }).to_string());
-
-                self.finished_games.push(web_state);
-                if self.finished_games.len() > self.max_finished_games {
-                    self.finished_games.remove(0);
-                }
             }
-        }
 
-        // Broadcast state of active games
-        for game in self.active_games.values() {
-            if game.status == GameStatus::Running {
-                let _ = self.broadcast_tx.send(serde_json::json!({
-                    "type": "game_update",
-                    "game": game.to_web_state(),
-                }).to_string());
+            let web_state = game.to_web_state();
+            let _ = self.broadcast_tx.send(serde_json::json!({
+                "type": "game_finished",
+                "game": &web_state,
+            }).to_string());
+
+            self.finished_games.push(web_state);
+            if self.finished_games.len() > self.max_finished_games {
+                self.finished_games.remove(0);
             }
+
+            self.save_leaderboard();
         }
     }
 

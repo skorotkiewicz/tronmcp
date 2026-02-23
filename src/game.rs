@@ -80,7 +80,6 @@ pub struct Player {
     pub trail: VecDeque<(i32, i32)>,
     pub distance_traveled: u32,
     pub score: u32,
-    pub pending_action: Option<SteerAction>,
 }
 
 /// Game status
@@ -189,19 +188,9 @@ impl Game {
             trail: VecDeque::new(),
             distance_traveled: 0,
             score: 0,
-            pending_action: None,
         });
 
         Some(idx)
-    }
-
-    /// Apply a steering action for a player
-    pub fn apply_action(&mut self, player_idx: usize, action: SteerAction) {
-        if let Some(player) = self.players.get_mut(player_idx) {
-            if player.alive {
-                player.pending_action = Some(action);
-            }
-        }
     }
 
     /// Start the game
@@ -217,121 +206,106 @@ impl Game {
         }
     }
 
-    /// Advance the game by one tick
-    pub fn tick(&mut self) {
+    /// Move a single player one step: apply steering then advance forward.
+    /// Returns a description of what happened.
+    pub fn move_player(&mut self, player_idx: usize, action: SteerAction) -> String {
         if self.status != GameStatus::Running {
-            return;
+            return "Game is not running.".to_string();
         }
 
-        self.tick += 1;
-
-        // Apply pending actions and calculate new positions
-        let mut new_positions: Vec<(i32, i32)> = Vec::new();
-
-        for player in self.players.iter_mut() {
-            if !player.alive {
-                new_positions.push((player.x, player.y));
-                continue;
-            }
-
-            // Apply steering
-            match player.pending_action.take() {
-                Some(SteerAction::Left) => player.direction = player.direction.turn_left(),
-                Some(SteerAction::Right) => player.direction = player.direction.turn_right(),
-                Some(SteerAction::Straight) | None => {}
-            }
-
-            // Calculate new position
-            let (dx, dy) = player.direction.delta();
-            let nx = player.x + dx;
-            let ny = player.y + dy;
-            new_positions.push((nx, ny));
+        let player = &mut self.players[player_idx];
+        if !player.alive {
+            return "You have crashed! Game over.".to_string();
         }
 
-        // Check collisions for each alive player
-        let mut killed = vec![false; self.players.len()];
-
-        for i in 0..self.players.len() {
-            if !self.players[i].alive {
-                continue;
-            }
-
-            let (nx, ny) = new_positions[i];
-
-            // Out of bounds
-            if nx < 0 || ny < 0 || nx >= self.width as i32 || ny >= self.height as i32 {
-                killed[i] = true;
-                continue;
-            }
-
-            let ux = nx as usize;
-            let uy = ny as usize;
-
-            // Check grid collision (wall, obstruction, trail)
-            match self.grid[uy][ux] {
-                Cell::Wall | Cell::Obstruction | Cell::Trail(_) => {
-                    killed[i] = true;
-                    continue;
-                }
-                Cell::Empty => {}
-            }
-
-            // Check head-on collision with other players
-            for j in 0..self.players.len() {
-                if i == j || !self.players[j].alive {
-                    continue;
-                }
-                if new_positions[i] == new_positions[j] {
-                    killed[i] = true;
-                    killed[j] = true;
-                }
-            }
+        // Apply steering
+        match action {
+            SteerAction::Left => player.direction = player.direction.turn_left(),
+            SteerAction::Right => player.direction = player.direction.turn_right(),
+            SteerAction::Straight => {}
         }
 
-        // Apply movements and kills
-        for i in 0..self.players.len() {
-            if !self.players[i].alive {
-                continue;
+        // Calculate new position
+        let (dx, dy) = player.direction.delta();
+        let nx = player.x + dx;
+        let ny = player.y + dy;
+
+        // Check out of bounds
+        if nx < 0 || ny < 0 || nx >= self.width as i32 || ny >= self.height as i32 {
+            self.players[player_idx].alive = false;
+            self.check_win_condition();
+            return "CRASHED into the boundary wall!".to_string();
+        }
+
+        let ux = nx as usize;
+        let uy = ny as usize;
+
+        // Check grid collision
+        match self.grid[uy][ux] {
+            Cell::Wall => {
+                self.players[player_idx].alive = false;
+                self.check_win_condition();
+                return "CRASHED into a wall!".to_string();
             }
-
-            if killed[i] {
-                self.players[i].alive = false;
-                continue;
+            Cell::Obstruction => {
+                self.players[player_idx].alive = false;
+                self.check_win_condition();
+                return "CRASHED into an obstruction!".to_string();
             }
+            Cell::Trail(other_idx) => {
+                self.players[player_idx].alive = false;
+                let whose = if other_idx == player_idx {
+                    "your own".to_string()
+                } else {
+                    format!("{}'s", self.players[other_idx].name)
+                };
+                self.check_win_condition();
+                return format!("CRASHED into {} trail!", whose);
+            }
+            Cell::Empty => {}
+        }
 
-            let (nx, ny) = new_positions[i];
+        // Move is safe — update position
+        let old_x = self.players[player_idx].x;
+        let old_y = self.players[player_idx].y;
+        self.players[player_idx].trail.push_back((old_x, old_y));
 
-            // Add current position to trail (extract to avoid borrow conflict)
-            let old_x = self.players[i].x;
-            let old_y = self.players[i].y;
-            self.players[i].trail.push_back((old_x, old_y));
-
-            // Trim trail if too long
-            let max_trail = self.max_trail_length;
-            while self.players[i].trail.len() > max_trail {
-                if let Some((tx, ty)) = self.players[i].trail.pop_front() {
-                    let ux = tx as usize;
-                    let uy = ty as usize;
-                    if uy < self.height && ux < self.width {
-                        if self.grid[uy][ux] == Cell::Trail(i) {
-                            self.grid[uy][ux] = Cell::Empty;
-                        }
+        // Trim trail if too long
+        let max_trail = self.max_trail_length;
+        while self.players[player_idx].trail.len() > max_trail {
+            if let Some((tx, ty)) = self.players[player_idx].trail.pop_front() {
+                let tux = tx as usize;
+                let tuy = ty as usize;
+                if tuy < self.height && tux < self.width {
+                    if self.grid[tuy][tux] == Cell::Trail(player_idx) {
+                        self.grid[tuy][tux] = Cell::Empty;
                     }
                 }
             }
-
-            // Move player
-            self.players[i].x = nx;
-            self.players[i].y = ny;
-            self.players[i].distance_traveled += 1;
-
-            // Place trail on grid
-            let ux = nx as usize;
-            let uy = ny as usize;
-            self.grid[uy][ux] = Cell::Trail(i);
         }
 
-        // Check win condition
+        // Update player position
+        self.players[player_idx].x = nx;
+        self.players[player_idx].y = ny;
+        self.players[player_idx].distance_traveled += 1;
+        self.tick += 1;
+
+        // Place trail on grid
+        self.grid[uy][ux] = Cell::Trail(player_idx);
+
+        self.check_win_condition();
+
+        format!(
+            "Moved {} to ({}, {}). Distance: {}.",
+            self.players[player_idx].direction.name(),
+            nx,
+            ny,
+            self.players[player_idx].distance_traveled
+        )
+    }
+
+    /// Check if only one (or zero) players are alive and finish the game
+    fn check_win_condition(&mut self) {
         let alive_players: Vec<usize> = self
             .players
             .iter()
@@ -340,7 +314,7 @@ impl Game {
             .map(|(i, _)| i)
             .collect();
 
-        if alive_players.len() <= 1 {
+        if alive_players.len() <= 1 && self.players.len() > 1 {
             self.status = GameStatus::Finished;
             self.finished_at = Some(chrono::Utc::now());
 
@@ -348,7 +322,6 @@ impl Game {
                 let winner_idx = alive_players[0];
                 self.winner = Some(winner_idx);
 
-                // Calculate score: base 100 + distance bonus + speed bonus
                 let speed_bonus = if self.tick > 0 {
                     (1000 / self.tick).min(200)
                 } else {
@@ -357,12 +330,6 @@ impl Game {
                 self.players[winner_idx].score =
                     100 + self.players[winner_idx].distance_traveled + speed_bonus;
             }
-        }
-
-        // Also finish if no players alive
-        if alive_players.is_empty() && self.status != GameStatus::Finished {
-            self.status = GameStatus::Finished;
-            self.finished_at = Some(chrono::Utc::now());
         }
     }
 

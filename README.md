@@ -2,19 +2,16 @@
 
 Tron-style multiplayer light-cycle game for LLMs via [MCP](https://modelcontextprotocol.io/).
 
-LLMs control light-cycles on a grid. Each cycle moves forward automatically, trailing light behind it. Crash into a wall, obstruction, or any trail — you lose. Last one standing wins and advances to harder courses.
+LLMs control light-cycles on a grid. Cycles don't move automatically — each `steer` call moves one step forward. Crash into a wall, obstruction, or any trail — you lose. Last one standing wins and advances to harder courses.
 
 ## Quick Start
 
 ```bash
-# Build
 cargo build --release
-
-# Start server (web UI + MCP on :3000, game TCP on :9999)
 ./target/release/tronmcp serve
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to watch games live.
+Web UI on [http://localhost:3000](http://localhost:3000). Leaderboard persisted to `data/leaderboard.json`.
 
 ## Connect Your LLM
 
@@ -30,7 +27,7 @@ Open [http://localhost:3000](http://localhost:3000) to watch games live.
 }
 ```
 
-### Local (stdio binary)
+### Local binary (stdio)
 
 ```json
 {
@@ -43,7 +40,7 @@ Open [http://localhost:3000](http://localhost:3000) to watch games live.
 }
 ```
 
-### Remote via SSH
+### SSH
 
 ```json
 {
@@ -62,10 +59,10 @@ Open [http://localhost:3000](http://localhost:3000) to watch games live.
 |------|-------------|
 | `join_game(name)` | Join the next game |
 | `look()` | See the grid around you |
-| `steer(direction)` | `"left"`, `"right"`, or `"straight"` |
+| `steer(direction)` | Turn + move one step: `"left"`, `"right"`, or `"straight"` |
 | `game_status()` | Check scores & results |
 
-The `look` tool returns a text grid centered on your cycle:
+Each `steer` = one grid step. Call `look` → `steer` → `look` → `steer` → repeat.
 
 ```
 Your light-cycle 'Claude' is at (15, 10) heading NORTH.
@@ -80,9 +77,6 @@ Grid (15x15 view centered on you):
 . . . . . @ . . . . . . . . .
 . . . . . | . . . . . . . . .
 . . . . . | . . . . . . . . .
-. . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . .
 . . . . . . . . . . . . . . .
 # # # # # # # # # # # # # # #
 
@@ -104,6 +98,10 @@ Winners advance automatically. Points = 100 base + distance + speed bonus.
 ## Options
 
 ```
-tronmcp serve [--port 3000] [--tcp-port 9999] [--tick-ms 500]
+tronmcp serve [--port 3000] [--tcp-port 9999] [--data-dir data]
 tronmcp play  [--server 127.0.0.1:9999]
 ```
+
+## Storage
+
+Leaderboard is saved to `data/leaderboard.json` after each game. Loaded automatically on startup.

@@ -32,16 +32,17 @@ pub struct SteerParams {
 // ─── Shared MCP tool descriptions ───
 
 const INSTRUCTIONS: &str = "Tron Light-Cycle MCP Game! You control a light-cycle on a grid. \
-Your cycle moves forward automatically, trailing light behind it. \
+Your cycle does NOT move automatically — each 'steer' call moves you one step forward. \
+You choose direction (left/right/straight) and it moves one cell that way. \
 Crash into anything (walls, trails, obstructions) and you lose. \
 Last cycle standing wins!\n\n\
 Tools:\n\
 1. join_game(name) - Join a game with your name\n\
-2. look() - See the grid around you (call frequently!)\n\
-3. steer(direction) - Turn 'left', 'right', or go 'straight'\n\
+2. look() - See the grid around you (call before every steer!)\n\
+3. steer(direction) - Turn + move one step: 'left', 'right', or 'straight'\n\
 4. game_status() - Check game outcome and scores\n\n\
-Strategy: Call 'look' before each 'steer' to see what's around you. \
-The game ticks automatically, so act quickly! Longer survival = more points.";
+Strategy: Always call 'look' first, then 'steer' to move. Repeat. \
+Each steer = one grid step. Longer distance = more points.";
 
 // ─── TCP-backed MCP Server (for `tronmcp play` stdio mode) ───
 
@@ -84,7 +85,7 @@ impl TronMcpServer {
 
 #[tool_router]
 impl TronMcpServer {
-    #[tool(description = "Join the next available Tron light-cycle game. You will be matched with other players. Once the game starts, use 'look' to see the grid and 'steer' to change direction. Your light-cycle moves forward automatically every tick.")]
+    #[tool(description = "Join the next available Tron light-cycle game. You will be matched with other players. Once the game starts, use 'look' to see the grid and 'steer' to move. Your light-cycle does NOT move automatically — each 'steer' call moves you one step.")]
     fn join_game(&self, Parameters(params): Parameters<JoinGameParams>) -> Result<CallToolResult, McpError> {
         let name = params.name.trim().to_string();
         if name.is_empty() { return Ok(CallToolResult::error(vec![Content::text("Name cannot be empty.")])); }
@@ -101,7 +102,7 @@ impl TronMcpServer {
         Ok(CallToolResult::success(vec![Content::text(response)]))
     }
 
-    #[tool(description = "Steer your light-cycle. Direction must be 'left' (turn left relative to current heading), 'right' (turn right relative to current heading), or 'straight' (keep going forward). Your cycle moves forward automatically — you only control turning. Be careful: crashing into walls, obstructions, or any trail (yours or others) means you lose!")]
+    #[tool(description = "Steer your light-cycle and move ONE step forward. Direction must be 'left' (turn left then move), 'right' (turn right then move), or 'straight' (move forward). Each call moves exactly one cell. Call 'look' before each 'steer' to see what's ahead! Crashing into walls, obstructions, or any trail means you lose!")]
     fn steer(&self, Parameters(params): Parameters<SteerParams>) -> Result<CallToolResult, McpError> {
         let name = self.player_name.lock().map_err(|e| McpError::internal_error(format!("{}", e), None))?;
         let name = name.as_ref().ok_or_else(|| McpError::invalid_params("Use join_game first.", None))?;
@@ -166,7 +167,7 @@ impl TronMcpHttpHandler {
 
 #[tool_router]
 impl TronMcpHttpHandler {
-    #[tool(description = "Join the next available Tron light-cycle game. You will be matched with other players. Once the game starts, use 'look' to see the grid and 'steer' to change direction. Your light-cycle moves forward automatically every tick.")]
+    #[tool(description = "Join the next available Tron light-cycle game. You will be matched with other players. Once the game starts, use 'look' to see the grid and 'steer' to move. Your light-cycle does NOT move automatically — each 'steer' call moves you one step.")]
     async fn join_game(&self, Parameters(params): Parameters<JoinGameParams>) -> Result<CallToolResult, McpError> {
         let name = params.name.trim().to_string();
         if name.is_empty() { return Ok(CallToolResult::error(vec![Content::text("Name cannot be empty.")])); }
@@ -189,7 +190,7 @@ impl TronMcpHttpHandler {
         }
     }
 
-    #[tool(description = "Steer your light-cycle. Direction must be 'left' (turn left relative to current heading), 'right' (turn right relative to current heading), or 'straight' (keep going forward). Your cycle moves forward automatically — you only control turning. Be careful: crashing into walls, obstructions, or any trail (yours or others) means you lose!")]
+    #[tool(description = "Steer your light-cycle and move ONE step forward. Direction must be 'left' (turn left then move), 'right' (turn right then move), or 'straight' (move forward). Each call moves exactly one cell. Call 'look' before each 'steer' to see what's ahead! Crashing into walls, obstructions, or any trail means you lose!")]
     async fn steer(&self, Parameters(params): Parameters<SteerParams>) -> Result<CallToolResult, McpError> {
         let name_guard = self.player_name.lock().await;
         let name = name_guard.as_ref().ok_or_else(|| McpError::invalid_params("Use join_game first.", None))?;
@@ -201,7 +202,7 @@ impl TronMcpHttpHandler {
             _ => return Ok(CallToolResult::error(vec![Content::text("Direction must be 'left', 'right', or 'straight'.")])),
         };
         let mut mgr = self.manager.lock().await;
-        match mgr.steer(name, action) {
+        match mgr.move_player(name, action) {
             Ok(msg) => Ok(CallToolResult::success(vec![Content::text(msg)])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
         }
